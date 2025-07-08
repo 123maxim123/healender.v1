@@ -1,10 +1,11 @@
 const CACHE_NAME = 'sigara-takvimi-v1';
 const urlsToCache = [
-    '/healender/',
-    '/healender/index.html',
-    '/healender/style.css',
-    '/healender/script.js',
-    '/healender/manifest.json'
+    'https://123maxim123.github.io/healender.v1/',
+    'https://123maxim123.github.io/healender.v1/index.html',
+    'https://123maxim123.github.io/healender.v1/style.css',
+    'https://123maxim123.github.io/healender.v1/script.js',
+    'https://123maxim123.github.io/healender.v1/manifest.json'
+];
 ];
 
 self.addEventListener('install', event => {

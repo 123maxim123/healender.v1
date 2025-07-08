@@ -1,10 +1,10 @@
 const CACHE_NAME = 'sigara-takvimi-v1';
 const urlsToCache = [
-    '/',
-    '/index.html',
-    '/style.css',
-    '/script.js',
-    '/manifest.json'
+    '/healender/',
+    '/healender/index.html',
+    '/healender/style.css',
+    '/healender/script.js',
+    '/healender/manifest.json'
 ];
 
 self.addEventListener('install', event => {
@@ -28,4 +28,4 @@ self.addEventListener('fetch', event => {
             }
         )
     );
-}); 
+});

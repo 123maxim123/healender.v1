@@ -3,6 +3,7 @@
   "short_name": "Sigara Takvimi",
   "description": "Sigara bırakma takibi ve yatırım hesaplama uygulaması",
   "start_url": "https://123maxim123.github.io/healender.v1/",
+  "scope": "https://123maxim123.github.io/healender.v1/",
   "display": "standalone",
   "background_color": "#1a1a1a",
   "theme_color": "#1a1a1a",

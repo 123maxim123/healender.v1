@@ -1,398 +1,545 @@
-class SigaraTakvimi {
-    constructor() {
-        this.currentDate = new Date(); // Bugünün tarihinden başla
-        this.today = new Date();
-        this.cigarettePrice = 85; // Varsayılan fiyat
-        this.dayData = {}; // {date: {red: boolean, blue: boolean}}
-        
-        this.monthNames = [
-            'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
-            'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
-        ];
-        
-        this.init();
-    }
-    
-    init() {
-        this.loadData();
-        this.bindEvents();
-        this.renderCalendar();
-        this.updateStats();
-    }
-    
-    bindEvents() {
-        // Navigation buttons
-        document.getElementById('prevBtn').addEventListener('click', () => this.previousMonth());
-        document.getElementById('nextBtn').addEventListener('click', () => this.nextMonth());
-        
-        // Settings modal
-        document.getElementById('settingsBtn').addEventListener('click', () => this.openSettings());
-        document.getElementById('closeBtn').addEventListener('click', () => this.closeSettings());
-        document.getElementById('saveBtn').addEventListener('click', () => this.saveSettings());
-        
-        // Modal backdrop click
-        document.getElementById('settingsModal').addEventListener('click', (e) => {
-            if (e.target.id === 'settingsModal') {
-                this.closeSettings();
-            }
-        });
-        
-        // ESC key to close modal
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.closeSettings();
-            }
-        });
-    }
-    
-    previousMonth() {
-        const calendar = document.getElementById('calendar');
-        calendar.style.transform = 'translateX(-100%)';
-        calendar.style.opacity = '0.5';
-        
-        setTimeout(() => {
-            this.currentDate.setMonth(this.currentDate.getMonth() - 1);
-            this.renderCalendar();
-            
-            calendar.style.transform = 'translateX(100%)';
-            requestAnimationFrame(() => {
-                calendar.style.transform = 'translateX(0)';
-                calendar.style.opacity = '1';
+// Healender v2.0 - Firebase Edition
+// Global değişkenler
+let currentDate = new Date();
+let calendarData = {};
+let settings = { cigarettePrice: 85 };
+let isFirebaseReady = false;
+let currentUser = null;
+
+// DOM Elementleri
+const calendar = document.getElementById('calendar');
+const monthYear = document.getElementById('monthYear');
+const prevMonth = document.getElementById('prevMonth');
+const nextMonth = document.getElementById('nextMonth');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModal = document.getElementById('settingsModal');
+const closeSettings = document.getElementById('closeSettings');
+const cigarettePrice = document.getElementById('cigarettePrice');
+const smokeFreeValue = document.getElementById('smokeFreeValue');
+const moneySavedValue = document.getElementById('moneySavedValue');
+const moneyInvestedValue = document.getElementById('moneyInvestedValue');
+
+// Firebase Status Elements
+const firebaseStatus = document.getElementById('firebaseStatus');
+const statusIndicator = document.getElementById('statusIndicator');
+const statusText = document.getElementById('statusText');
+const syncIndicator = document.getElementById('syncIndicator');
+const syncText = document.getElementById('syncText');
+const forceSyncBtn = document.getElementById('forceSyncBtn');
+const exportBtn = document.getElementById('exportBtn');
+const importBtn = document.getElementById('importBtn');
+const importFile = document.getElementById('importFile');
+const resetBtn = document.getElementById('resetBtn');
+const lastUpdate = document.getElementById('lastUpdate');
+
+// Ay isimleri
+const months = [
+    'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+];
+
+// Firebase bağlantı kontrolü
+function checkFirebaseConnection() {
+    if (typeof firebase !== 'undefined' && db) {
+        // Basit bir test yazısı
+        db.collection('test').doc('connection').get()
+            .then(() => {
+                isFirebaseReady = true;
+                updateConnectionStatus(true);
+                initializeUser();
+            })
+            .catch((error) => {
+                console.error('Firebase bağlantı hatası:', error);
+                isFirebaseReady = false;
+                updateConnectionStatus(false);
+                loadFromLocalStorage();
             });
-        }, 150);
+    } else {
+        isFirebaseReady = false;
+        updateConnectionStatus(false);
+        loadFromLocalStorage();
     }
+}
+
+// Bağlantı durumu güncelle
+function updateConnectionStatus(online) {
+    const indicator = statusIndicator;
+    const text = statusText;
+    const syncInd = syncIndicator;
+    const syncTxt = syncText;
     
-    nextMonth() {
-        const calendar = document.getElementById('calendar');
-        calendar.style.transform = 'translateX(100%)';
-        calendar.style.opacity = '0.5';
-        
-        setTimeout(() => {
-            this.currentDate.setMonth(this.currentDate.getMonth() + 1);
-            this.renderCalendar();
-            
-            calendar.style.transform = 'translateX(-100%)';
-            requestAnimationFrame(() => {
-                calendar.style.transform = 'translateX(0)';
-                calendar.style.opacity = '1';
-            });
-        }, 150);
-    }
-    
-    renderCalendar() {
-        this.updateMonthDisplay();
-        this.renderDays();
-    }
-    
-    updateMonthDisplay() {
-        const monthElement = document.getElementById('currentMonth');
-        const monthName = this.monthNames[this.currentDate.getMonth()];
-        const year = this.currentDate.getFullYear();
-        monthElement.textContent = `${monthName} ${year}`;
-    }
-    
-    renderDays() {
-        const daysContainer = document.getElementById('days');
-        daysContainer.innerHTML = '';
-        
-        const year = this.currentDate.getFullYear();
-        const month = this.currentDate.getMonth();
-        
-        // İlk gün ve son gün
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        
-        // Haftanın ilk günü (Pazar = 0)
-        const startDay = firstDay.getDay();
-        
-        // Önceki ayın son günleri
-        const prevMonth = new Date(year, month, 0);
-        for (let i = startDay - 1; i >= 0; i--) {
-            const day = prevMonth.getDate() - i;
-            const dayElement = this.createDayElement(day, true);
-            daysContainer.appendChild(dayElement);
+    if (online) {
+        indicator.className = 'status-indicator online';
+        text.textContent = 'Bağlandı';
+        if (syncInd) {
+            syncInd.className = 'sync-indicator online';
+            syncTxt.textContent = 'Senkronize';
         }
-        
-        // Bu ayın günleri
-        for (let day = 1; day <= lastDay.getDate(); day++) {
-            const dayElement = this.createDayElement(day, false);
-            daysContainer.appendChild(dayElement);
-        }
-        
-        // Sonraki ayın ilk günleri (42 gün için)
-        const totalCells = 42;
-        const currentCells = daysContainer.children.length;
-        const remainingCells = totalCells - currentCells;
-        
-        for (let day = 1; day <= remainingCells; day++) {
-            const dayElement = this.createDayElement(day, true);
-            daysContainer.appendChild(dayElement);
-        }
-    }
-    
-    createDayElement(day, isOtherMonth) {
-        const dayElement = document.createElement('div');
-        dayElement.className = 'day';
-        dayElement.textContent = day;
-        
-        if (isOtherMonth) {
-            dayElement.classList.add('other-month');
-            return dayElement;
-        }
-        
-        const dateStr = this.getDateString(this.currentDate.getFullYear(), this.currentDate.getMonth(), day);
-        const currentDay = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), day);
-        
-        // Bugün mü?
-        if (this.isSameDay(currentDay, this.today)) {
-            dayElement.classList.add('today');
-        }
-        
-        // Nokta var mı?
-        if (this.dayData[dateStr]) {
-            const data = this.dayData[dateStr];
-            if (data.red) {
-                const redDot = document.createElement('div');
-                redDot.className = 'day-dot red';
-                dayElement.appendChild(redDot);
-            }
-            if (data.blue) {
-                const blueDot = document.createElement('div');
-                blueDot.className = 'day-dot blue';
-                dayElement.appendChild(blueDot);
-            }
-        }
-        
-        // Click event
-        dayElement.addEventListener('click', () => this.onDayClick(dateStr));
-        
-        return dayElement;
-    }
-    
-    onDayClick(dateStr) {
-        if (!this.dayData[dateStr]) {
-            this.dayData[dateStr] = { red: false, blue: false, clickCount: 0 };
-        }
-        
-        const data = this.dayData[dateStr];
-        if (data.clickCount === undefined) data.clickCount = 0;
-        
-        // Döngüsel tıklama sistemi:
-        // 0: Boş → Kırmızı
-        // 1: Kırmızı → Kırmızı+Mavi  
-        // 2: Kırmızı+Mavi → Kırmızı (mavi sil)
-        // 3: Kırmızı → Boş (kırmızı sil)
-        
-        data.clickCount = (data.clickCount + 1) % 4;
-        
-        switch(data.clickCount) {
-            case 1: // Kırmızı ekle
-                data.red = true;
-                data.blue = false;
-                break;
-            case 2: // Mavi ekle
-                data.red = true;
-                data.blue = true;
-                break;
-            case 3: // Mavi sil
-                data.red = true;
-                data.blue = false;
-                break;
-            case 0: // Her şeyi sil
-                data.red = false;
-                data.blue = false;
-                break;
-        }
-        
-        this.saveData();
-        this.renderCalendar();
-        this.updateStats();
-        
-        // Haptic feedback simulation
-        this.vibrate();
-    }
-    
-    vibrate() {
-        if (navigator.vibrate) {
-            navigator.vibrate(50);
-        }
-    }
-    
-    updateStats() {
-        const savedMoney = this.calculateSavedMoney();
-        const totalInvestment = this.calculateTotalInvestment();
-        
-        document.getElementById('savedMoney').textContent = `${savedMoney.toLocaleString('tr-TR')} ₺`;
-        document.getElementById('totalInvestment').textContent = `${totalInvestment.toLocaleString('tr-TR')} ₺`;
-    }
-    
-    calculateSavedMoney() {
-        let redDots = 0;
-        for (const date in this.dayData) {
-            if (this.dayData[date].red) {
-                redDots++;
-            }
-        }
-        return redDots * this.cigarettePrice;
-    }
-    
-    calculateTotalInvestment() {
-        // Tarih sıralaması için tüm tarihleri al
-        const sortedDates = Object.keys(this.dayData).sort();
-        let totalInvestment = 0;
-        let redCount = 0;
-        
-        for (const date of sortedDates) {
-            const data = this.dayData[date];
-            
-            if (data.red) {
-                redCount++;
-            }
-            
-            if (data.blue) {
-                // Mavi nokta geldiğinde şimdiye kadarki kırmızı noktaları hesapla
-                totalInvestment += redCount * this.cigarettePrice;
-                redCount = 0; // Sayacı sıfırla
-            }
-        }
-        
-        return totalInvestment;
-    }
-    
-    openSettings() {
-        const modal = document.getElementById('settingsModal');
-        const priceInput = document.getElementById('cigarettePrice');
-        
-        priceInput.value = this.cigarettePrice;
-        modal.classList.add('active');
-        
-        // Focus input
-        setTimeout(() => priceInput.focus(), 100);
-    }
-    
-    closeSettings() {
-        const modal = document.getElementById('settingsModal');
-        modal.classList.remove('active');
-    }
-    
-    saveSettings() {
-        const priceInput = document.getElementById('cigarettePrice');
-        const newPrice = parseFloat(priceInput.value);
-        
-        if (newPrice && newPrice > 0) {
-            this.cigarettePrice = newPrice;
-            this.saveData();
-            this.updateStats();
-            this.closeSettings();
-            
-            // Success feedback
-            this.showToast('Ayarlar kaydedildi!');
-        } else {
-            // Error feedback
-            this.showToast('Geçerli bir fiyat girin!', 'error');
-        }
-    }
-    
-    showToast(message, type = 'success') {
-        // Simple toast notification
-        const toast = document.createElement('div');
-        toast.style.cssText = `
-            position: fixed;
-            top: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: ${type === 'error' ? '#FF3B30' : '#34C759'};
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            z-index: 10000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            animation: toastIn 0.3s ease;
-        `;
-        toast.textContent = message;
-        
-        document.body.appendChild(toast);
-        
-        setTimeout(() => {
-            toast.style.animation = 'toastOut 0.3s ease forwards';
-            setTimeout(() => toast.remove(), 300);
-        }, 2000);
-    }
-    
-    getDateString(year, month, day) {
-        return `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-    }
-    
-    isSameDay(date1, date2) {
-        return date1.getDate() === date2.getDate() &&
-               date1.getMonth() === date2.getMonth() &&
-               date1.getFullYear() === date2.getFullYear();
-    }
-    
-    saveData() {
-        const data = {
-            cigarettePrice: this.cigarettePrice,
-            dayData: this.dayData
-        };
-        localStorage.setItem('sigaraTakvimi', JSON.stringify(data));
-    }
-    
-    loadData() {
-        const saved = localStorage.getItem('sigaraTakvimi');
-        if (saved) {
-            try {
-                const data = JSON.parse(saved);
-                this.cigarettePrice = data.cigarettePrice || 85;
-                this.dayData = data.dayData || {};
-            } catch (e) {
-                console.error('Veri yükleme hatası:', e);
-            }
+    } else {
+        indicator.className = 'status-indicator offline';
+        text.textContent = 'Çevrimdışı';
+        if (syncInd) {
+            syncInd.className = 'sync-indicator offline';
+            syncTxt.textContent = 'Çevrimdışı';
         }
     }
 }
 
-// CSS animations for toast
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes toastIn {
-        from {
-            opacity: 0;
-            transform: translateX(-50%) translateY(-20px);
+// Kullanıcı başlatma (Anonymous auth)
+async function initializeUser() {
+    try {
+        // Anonymous authentication
+        const userCredential = await firebase.auth().signInAnonymously();
+        currentUser = userCredential.user;
+        console.log('Anonymous kullanıcı giriş yaptı:', currentUser.uid);
+        
+        await loadFromFirestore();
+        setupRealtimeListeners();
+    } catch (error) {
+        console.error('Kullanıcı giriş hatası:', error);
+        loadFromLocalStorage();
+    }
+}
+
+// Firestore'dan veri yükleme
+async function loadFromFirestore() {
+    if (!currentUser) return;
+    
+    try {
+        updateSyncStatus('loading');
+        
+        // Ayarları yükle
+        const settingsDoc = await db.collection('users').doc(currentUser.uid).collection('data').doc('settings').get();
+        if (settingsDoc.exists) {
+            settings = settingsDoc.data();
+            cigarettePrice.value = settings.cigarettePrice || 85;
         }
-        to {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
+        
+        // Takvim verilerini yükle
+        const calendarDoc = await db.collection('users').doc(currentUser.uid).collection('data').doc('calendar').get();
+        if (calendarDoc.exists) {
+            calendarData = calendarDoc.data().days || {};
+        }
+        
+        updateSyncStatus('synced');
+        updateStats();
+        renderCalendar();
+        updateLastUpdateTime();
+        
+    } catch (error) {
+        console.error('Firestore yükleme hatası:', error);
+        updateSyncStatus('error');
+        loadFromLocalStorage();
+    }
+}
+
+// Firestore'a veri kaydetme
+async function saveToFirestore(type = 'all') {
+    if (!currentUser || !isFirebaseReady) {
+        saveToLocalStorage();
+        return;
+    }
+    
+    try {
+        updateSyncStatus('saving');
+        
+        const userRef = db.collection('users').doc(currentUser.uid).collection('data');
+        
+        if (type === 'all' || type === 'settings') {
+            await userRef.doc('settings').set({
+                cigarettePrice: parseFloat(cigarettePrice.value) || 85,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        
+        if (type === 'all' || type === 'calendar') {
+            await userRef.doc('calendar').set({
+                days: calendarData,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        
+        updateSyncStatus('synced');
+        updateLastUpdateTime();
+        
+    } catch (error) {
+        console.error('Firestore kaydetme hatası:', error);
+        updateSyncStatus('error');
+        saveToLocalStorage();
+    }
+}
+
+// Gerçek zamanlı dinleyiciler kurma
+function setupRealtimeListeners() {
+    if (!currentUser) return;
+    
+    const userRef = db.collection('users').doc(currentUser.uid).collection('data');
+    
+    // Takvim verilerini dinle
+    userRef.doc('calendar').onSnapshot((doc) => {
+        if (doc.exists) {
+            const data = doc.data();
+            if (data.days && JSON.stringify(data.days) !== JSON.stringify(calendarData)) {
+                calendarData = data.days;
+                renderCalendar();
+                updateStats();
+            }
+        }
+    });
+    
+    // Ayarları dinle
+    userRef.doc('settings').onSnapshot((doc) => {
+        if (doc.exists) {
+            const data = doc.data();
+            if (data.cigarettePrice !== settings.cigarettePrice) {
+                settings.cigarettePrice = data.cigarettePrice;
+                cigarettePrice.value = data.cigarettePrice;
+                updateStats();
+            }
+        }
+    });
+}
+
+// Sync durumu güncelle
+function updateSyncStatus(status) {
+    const syncInd = syncIndicator;
+    const syncTxt = syncText;
+    
+    if (!syncInd || !syncTxt) return;
+    
+    switch (status) {
+        case 'loading':
+            syncInd.className = 'sync-indicator loading';
+            syncTxt.textContent = 'Yükleniyor...';
+            break;
+        case 'saving':
+            syncInd.className = 'sync-indicator saving';
+            syncTxt.textContent = 'Kaydediliyor...';
+            break;
+        case 'synced':
+            syncInd.className = 'sync-indicator online';
+            syncTxt.textContent = 'Senkronize';
+            break;
+        case 'error':
+            syncInd.className = 'sync-indicator offline';
+            syncTxt.textContent = 'Hata';
+            break;
+    }
+}
+
+// LocalStorage fallback fonksiyonları
+function saveToLocalStorage() {
+    localStorage.setItem('healender_calendar', JSON.stringify(calendarData));
+    localStorage.setItem('healender_settings', JSON.stringify({
+        cigarettePrice: parseFloat(cigarettePrice.value) || 85
+    }));
+}
+
+function loadFromLocalStorage() {
+    try {
+        const savedCalendar = localStorage.getItem('healender_calendar');
+        const savedSettings = localStorage.getItem('healender_settings');
+        
+        if (savedCalendar) {
+            calendarData = JSON.parse(savedCalendar);
+        }
+        
+        if (savedSettings) {
+            settings = JSON.parse(savedSettings);
+            cigarettePrice.value = settings.cigarettePrice || 85;
+        }
+        
+        renderCalendar();
+        updateStats();
+    } catch (error) {
+        console.error('LocalStorage yükleme hatası:', error);
+    }
+}
+
+// Takvim render etme
+function renderCalendar() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    
+    monthYear.textContent = `${months[month]} ${year}`;
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const firstDayWeek = firstDay.getDay();
+    const daysInMonth = lastDay.getDate();
+    
+    let calendarHTML = '<div class="weekdays">';
+    const weekdays = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+    weekdays.forEach(day => {
+        calendarHTML += `<div class="weekday">${day}</div>`;
+    });
+    calendarHTML += '</div><div class="days">';
+    
+    // Önceki ayın günleri
+    for (let i = 0; i < firstDayWeek; i++) {
+        calendarHTML += '<div class="day other-month"></div>';
+    }
+    
+    // Bu ayın günleri
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayData = calendarData[dateStr] || {};
+        const isToday = isDateToday(year, month, day);
+        
+        let dayClass = 'day';
+        if (isToday) dayClass += ' today';
+        
+        let dotsHTML = '';
+        if (dayData.red) {
+            dotsHTML += '<div class="dot red-dot"></div>';
+        }
+        if (dayData.blue) {
+            dotsHTML += '<div class="dot blue-dot"></div>';
+        }
+        
+        calendarHTML += `
+            <div class="${dayClass}" data-date="${dateStr}">
+                <span class="day-number">${day}</span>
+                <div class="dots">${dotsHTML}</div>
+            </div>
+        `;
+    }
+    
+    calendarHTML += '</div>';
+    calendar.innerHTML = calendarHTML;
+    
+    // Gün tıklama event'leri
+    document.querySelectorAll('.day:not(.other-month)').forEach(dayEl => {
+        dayEl.addEventListener('click', handleDayClick);
+    });
+}
+
+// Gün tıklama işlemi
+function handleDayClick(e) {
+    const dateStr = e.currentTarget.getAttribute('data-date');
+    if (!dateStr) return;
+    
+    const currentData = calendarData[dateStr] || {};
+    
+    // Tıklama döngüsü: Boş → Kırmızı → Kırmızı+Mavi → Sadece Kırmızı → Boş
+    if (!currentData.red && !currentData.blue) {
+        // Boş → Kırmızı
+        calendarData[dateStr] = { red: true, blue: false };
+    } else if (currentData.red && !currentData.blue) {
+        // Kırmızı → Kırmızı+Mavi
+        calendarData[dateStr] = { red: true, blue: true };
+    } else if (currentData.red && currentData.blue) {
+        // Kırmızı+Mavi → Boş
+        delete calendarData[dateStr];
+    }
+    
+    saveToFirestore('calendar');
+    renderCalendar();
+    updateStats();
+}
+
+// Bugün kontrolü
+function isDateToday(year, month, day) {
+    const today = new Date();
+    return today.getFullYear() === year && 
+           today.getMonth() === month && 
+           today.getDate() === day;
+}
+
+// İstatistikleri güncelle
+function updateStats() {
+    const price = parseFloat(cigarettePrice.value) || 85;
+    
+    let smokeFreeCount = 0;
+    let totalSaved = 0;
+    let totalInvested = 0;
+    let consecutiveReds = 0;
+    
+    // Tarihleri sırala
+    const sortedDates = Object.keys(calendarData).sort();
+    
+    for (const dateStr of sortedDates) {
+        const dayData = calendarData[dateStr];
+        
+        if (dayData.red) {
+            smokeFreeCount++;
+            totalSaved += price;
+            consecutiveReds++;
+        }
+        
+        if (dayData.blue) {
+            // Mavi gün öncesindeki kırmızı günlerin parasını yatırıma ekle
+            totalInvested += consecutiveReds * price;
+            consecutiveReds = 0;
+        }
+        
+        if (!dayData.red) {
+            consecutiveReds = 0;
         }
     }
     
-    @keyframes toastOut {
-        from {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
+    smokeFreeValue.textContent = smokeFreeCount;
+    moneySavedValue.textContent = `${totalSaved.toFixed(0)} ₺`;
+    moneyInvestedValue.textContent = `${totalInvested.toFixed(0)} ₺`;
+}
+
+// Son güncelleme zamanını güncelle
+function updateLastUpdateTime() {
+    const now = new Date();
+    lastUpdate.textContent = now.toLocaleString('tr-TR');
+}
+
+// Veri dışa aktarma
+function exportData() {
+    const exportData = {
+        calendarData,
+        settings: { cigarettePrice: parseFloat(cigarettePrice.value) || 85 },
+        exportDate: new Date().toISOString(),
+        version: '2.0'
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `healender-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Veri içe aktarma
+function importData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importedData = JSON.parse(e.target.result);
+            
+            if (importedData.calendarData) {
+                calendarData = importedData.calendarData;
+            }
+            
+            if (importedData.settings && importedData.settings.cigarettePrice) {
+                cigarettePrice.value = importedData.settings.cigarettePrice;
+            }
+            
+            saveToFirestore('all');
+            renderCalendar();
+            updateStats();
+            
+            alert('Veriler başarıyla içe aktarıldı!');
+        } catch (error) {
+            console.error('Import hatası:', error);
+            alert('Dosya formatı hatalı!');
         }
-        to {
-            opacity: 0;
-            transform: translateX(-50%) translateY(-20px);
+    };
+    reader.readAsText(file);
+}
+
+// Tüm verileri sil
+async function resetAllData() {
+    if (!confirm('Tüm veriler silinecek. Emin misiniz?')) return;
+    
+    calendarData = {};
+    cigarettePrice.value = 85;
+    
+    if (currentUser && isFirebaseReady) {
+        try {
+            const userRef = db.collection('users').doc(currentUser.uid).collection('data');
+            await userRef.doc('calendar').delete();
+            await userRef.doc('settings').delete();
+        } catch (error) {
+            console.error('Firestore silme hatası:', error);
         }
     }
-`;
-document.head.appendChild(style);
+    
+    localStorage.removeItem('healender_calendar');
+    localStorage.removeItem('healender_settings');
+    
+    renderCalendar();
+    updateStats();
+    
+    alert('Tüm veriler silindi!');
+}
 
-// Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    new SigaraTakvimi();
+// Manuel senkronizasyon
+async function forceSync() {
+    if (!isFirebaseReady) {
+        alert('Firebase bağlantısı yok!');
+        return;
+    }
+    
+    updateSyncStatus('saving');
+    await saveToFirestore('all');
+    await loadFromFirestore();
+}
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Navigation
+    prevMonth.addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+        renderCalendar();
+    });
+    
+    nextMonth.addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        renderCalendar();
+    });
+    
+    // Settings
+    settingsBtn.addEventListener('click', () => {
+        settingsModal.style.display = 'flex';
+    });
+    
+    closeSettings.addEventListener('click', () => {
+        settingsModal.style.display = 'none';
+    });
+    
+    cigarettePrice.addEventListener('input', () => {
+        settings.cigarettePrice = parseFloat(cigarettePrice.value) || 85;
+        saveToFirestore('settings');
+        updateStats();
+    });
+    
+    // Data management
+    exportBtn.addEventListener('click', exportData);
+    importBtn.addEventListener('click', () => importFile.click());
+    importFile.addEventListener('change', importData);
+    resetBtn.addEventListener('click', resetAllData);
+    forceSyncBtn.addEventListener('click', forceSync);
+    
+    // Modal kapatma
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) {
+            settingsModal.style.display = 'none';
+        }
+    });
+    
+    // Firebase bağlantısını kontrol et
+    setTimeout(checkFirebaseConnection, 1000);
 });
 
-// Register service worker for PWA
+// Firebase Authentication state listener
+if (typeof firebase !== 'undefined') {
+    firebase.auth().onAuthStateChanged((user) => {
+        if (user) {
+            currentUser = user;
+            console.log('Kullanıcı durumu değişti:', user.uid);
+        }
+    });
+}
+
+// Service Worker Registration
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-            .then(registration => {
+        navigator.serviceWorker.register('sw.js')
+            .then((registration) => {
                 console.log('SW registered: ', registration);
             })
-            .catch(registrationError => {
+            .catch((registrationError) => {
                 console.log('SW registration failed: ', registrationError);
             });
     });

@@ -1,11 +1,10 @@
-const CACHE_NAME = 'sigara-takvimi-v1';
+const CACHE_NAME = 'healender-v2.1';
 const urlsToCache = [
-    'https://123maxim123.github.io/healender.v1/',
-    'https://123maxim123.github.io/healender.v1/index.html',
-    'https://123maxim123.github.io/healender.v1/style.css',
-    'https://123maxim123.github.io/healender.v1/script.js',
-    'https://123maxim123.github.io/healender.v1/manifest.json'
-];
+    'https://brkgndl.github.io/healender/',
+    'https://brkgndl.github.io/healender/index.html',
+    'https://brkgndl.github.io/healender/style.css',
+    'https://brkgndl.github.io/healender/script.js',
+    'https://brkgndl.github.io/healender/manifest.json'
 ];
 
 self.addEventListener('install', event => {
@@ -29,4 +28,4 @@ self.addEventListener('fetch', event => {
             }
         )
     );
-});
+}); 
